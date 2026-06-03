@@ -152,9 +152,49 @@ pub fn native_install(
     let version = &input.context.version;
     let version_str = version.to_string();
 
-    // Create a real host temp directory for downloads
-    let mktemp_output = exec_captured("mktemp", ["-d"])?;
-    let host_temp_dir = mktemp_output.stdout.trim().to_string();
+    // Create a real host temp directory for downloads.
+    // Windows runners don't reliably support `mktemp`, so create a temp dir via PowerShell.
+    let host_temp_dir = match env.os {
+        HostOS::Windows => {
+            let output = exec_captured(
+                "powershell",
+                [
+                    "-NoProfile",
+                    "-Command",
+                    "$dir = Join-Path $env:TEMP ([System.IO.Path]::GetRandomFileName()); New-Item -ItemType Directory -Path $dir -Force | Out-Null; Write-Output $dir",
+                ],
+            )?;
+
+            if output.exit_code != 0 {
+                return Ok(Json(NativeInstallOutput {
+                    installed: false,
+                    error: Some(format!(
+                        "Failed to create temporary directory for AWS CLI installer: {}",
+                        output.stderr
+                    )),
+                    ..NativeInstallOutput::default()
+                }));
+            }
+
+            output.stdout.trim().to_string()
+        }
+        _ => {
+            let output = exec_captured("mktemp", ["-d"])?;
+
+            if output.exit_code != 0 {
+                return Ok(Json(NativeInstallOutput {
+                    installed: false,
+                    error: Some(format!(
+                        "Failed to create temporary directory for AWS CLI installer: {}",
+                        output.stderr
+                    )),
+                    ..NativeInstallOutput::default()
+                }));
+            }
+
+            output.stdout.trim().to_string()
+        }
+    };
 
     match env.os {
         HostOS::Linux => {
@@ -283,7 +323,7 @@ pub fn native_install(
         HostOS::Windows => {
             let msi_name = format!("AWSCLIV2-{version_str}.msi");
             let msi_url = format!("https://awscli.amazonaws.com/{msi_name}");
-            let msi_path = format!("{}/{}", host_temp_dir, msi_name);
+            let msi_path = format!("{}\\{}", host_temp_dir, msi_name);
 
             // Download the MSI using curl on the host
             debug!("Downloading AWS CLI from <url>{}</url>", msi_url);
