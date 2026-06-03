@@ -409,8 +409,11 @@ pub fn locate_executables(
     let (exe_path, completer_path) = match env.os {
         HostOS::Linux => ("bin/aws".to_string(), "bin/aws_completer".to_string()),
         HostOS::MacOS => ("aws".to_string(), "aws_completer".to_string()),
-        // AWS CLI MSI installs executables at install root on Windows.
-        HostOS::Windows => ("aws.exe".to_string(), "aws_completer.exe".to_string()),
+        // AWS CLI MSI installs under v2/current/bin on Windows.
+        HostOS::Windows => (
+            "v2/current/bin/aws.exe".to_string(),
+            "v2/current/bin/aws_completer.exe".to_string(),
+        ),
         _ => ("aws".to_string(), "aws_completer".to_string()),
     };
 
