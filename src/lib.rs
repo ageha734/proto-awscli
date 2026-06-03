@@ -86,19 +86,13 @@ pub fn download_prebuilt(
                 HostArch::Arm64 => "aarch64",
                 _ => "x86_64",
             };
-            format!(
-                "https://awscli.amazonaws.com/awscli-exe-linux-{arch}-{version_str}.zip"
-            )
+            format!("https://awscli.amazonaws.com/awscli-exe-linux-{arch}-{version_str}.zip")
         }
         HostOS::MacOS => {
-            format!(
-                "https://awscli.amazonaws.com/AWSCLIV2-{version_str}.pkg"
-            )
+            format!("https://awscli.amazonaws.com/AWSCLIV2-{version_str}.pkg")
         }
         HostOS::Windows => {
-            format!(
-                "https://awscli.amazonaws.com/AWSCLIV2-{version_str}.msi"
-            )
+            format!("https://awscli.amazonaws.com/AWSCLIV2-{version_str}.msi")
         }
         _ => unreachable!(),
     };
@@ -181,10 +175,7 @@ pub fn native_install(
             // Unzip the archive
             debug!("Extracting AWS CLI archive");
 
-            let unzip_output = exec_captured(
-                "unzip",
-                ["-o", &zip_path, "-d", &host_temp_dir],
-            )?;
+            let unzip_output = exec_captured("unzip", ["-o", &zip_path, "-d", &host_temp_dir])?;
 
             if unzip_output.exit_code != 0 {
                 return Ok(Json(NativeInstallOutput {
@@ -203,7 +194,8 @@ pub fn native_install(
 
             debug!(
                 "Running AWS CLI installer to <path>{}</path>",
-                install_dir_str.clone());
+                install_dir_str.clone()
+            );
 
             let install_output = exec(ExecCommandInput {
                 command: installer_path,
@@ -245,10 +237,8 @@ pub fn native_install(
 
             debug!("Expanding AWS CLI package");
 
-            let expand_output = exec_captured(
-                "pkgutil",
-                ["--expand-full", &pkg_path, &expanded_dir],
-            )?;
+            let expand_output =
+                exec_captured("pkgutil", ["--expand-full", &pkg_path, &expanded_dir])?;
 
             if expand_output.exit_code != 0 {
                 return Ok(Json(NativeInstallOutput {
@@ -267,11 +257,16 @@ pub fn native_install(
 
             debug!(
                 "Copying AWS CLI to <path>{}</path>",
-                install_dir_str.clone());
+                install_dir_str.clone()
+            );
 
             let copy_output = exec_captured(
                 "cp",
-                ["-R", &format!("{}/.", payload_dir), &install_dir_str.clone()],
+                [
+                    "-R",
+                    &format!("{}/.", payload_dir),
+                    &install_dir_str.clone(),
+                ],
             )?;
 
             if copy_output.exit_code != 0 {
@@ -298,7 +293,8 @@ pub fn native_install(
             // Install using msiexec with target directory
             debug!(
                 "Installing AWS CLI to <path>{}</path>",
-                install_dir_str.clone());
+                install_dir_str.clone()
+            );
 
             let install_output = exec(ExecCommandInput {
                 command: "msiexec".into(),
@@ -353,7 +349,8 @@ pub fn native_uninstall(
             // On Linux/macOS, proto handles directory removal
             debug!(
                 "Removing AWS CLI from <path>{}</path>",
-                input.uninstall_dir.to_string());
+                input.uninstall_dir.to_string()
+            );
         }
     }
 
@@ -381,10 +378,7 @@ pub fn locate_executables(
 
     Ok(Json(LocateExecutablesOutput {
         exes: HashMap::from_iter([
-            (
-                "aws".into(),
-                ExecutableConfig::new_primary(&exe_path),
-            ),
+            ("aws".into(), ExecutableConfig::new_primary(&exe_path)),
             (
                 "aws_completer".into(),
                 ExecutableConfig::new(&completer_path),
