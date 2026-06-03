@@ -8,22 +8,15 @@ permissions:
 
 jobs:
   e2e:
-    name: "E2E (${{ matrix.target }})"
+    name: "E2E (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-apple-darwin
-            os: macos-15
-          - target: aarch64-apple-darwin
-            os: macos-15
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-24.04
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-24.04
-          - target: x86_64-pc-windows-msvc
-            os: windows-2025
+          - os: macos-15
+          - os: ubuntu-24.04
+          - os: windows-2025
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -32,24 +25,25 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          path: proto_awscli.wasm
+          name: proto_awscli.wasm
+          path: .
 
       - name: Setup proto
         uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
 
-      - run: mkdir -p ~/.proto
-
       - name: Configure plugin
         run: |
           cat > ~/.proto/.prototools <<'PROTOEOF'
+          awscli-test = "2.34.59"
+
           [plugins]
           awscli-test = "file://$(pwd)/proto_awscli.wasm"
           PROTOEOF
 
-      - name: Run E2E (${{ matrix.target }})
+      - name: Run E2E (${{ matrix.os }})
         run: proto install awscli-test
 
-      - name: Verify installation (${{ matrix.target }})
+      - name: Verify installation (${{ matrix.os }})
         run: proto run awscli-test -- version
