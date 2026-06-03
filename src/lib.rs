@@ -5,6 +5,7 @@ use std::collections::HashMap;
 #[host_fn]
 extern "ExtismHost" {
     fn exec_command(input: Json<ExecCommandInput>) -> Json<ExecCommandOutput>;
+    fn from_virtual_path(path: String) -> String;
 }
 
 static NAME: &str = "AWS CLI";
@@ -25,13 +26,13 @@ pub fn register_tool(Json(_): Json<RegisterToolInput>) -> FnResult<Json<Register
 pub fn load_versions(Json(_): Json<LoadVersionsInput>) -> FnResult<Json<LoadVersionsOutput>> {
     let tags = load_git_tags("https://github.com/aws/aws-cli")?
         .into_iter()
-        .filter_map(|tag| {
-            // Only include v2 tags (e.g., "2.x.x")
-            if tag.starts_with("2.") {
-                Some(tag)
-            } else {
-                None
-            }
+        .filter(|tag| {
+            tag.starts_with("2.")
+                && !tag.contains("dev")
+                && !tag.contains("alpha")
+                && !tag.contains("beta")
+                && !tag.contains("rc")
+                && tag.chars().all(|c| c.is_ascii_digit() || c == '.')
         })
         .collect::<Vec<_>>();
 
@@ -138,11 +139,10 @@ fn download_file(url: &str, dest: &str) -> Result<(), Error> {
     })?;
 
     if output.exit_code != 0 {
-        return Err(plugin_err!(
+        return Err(Error::msg(format!(
             "Failed to download {}: {}",
-            url,
-            output.stderr
-        ));
+            url, output.stderr
+        )));
     }
 
     Ok(())
@@ -153,9 +153,14 @@ pub fn native_install(
     Json(input): Json<NativeInstallInput>,
 ) -> FnResult<Json<NativeInstallOutput>> {
     let env = get_host_environment()?;
-    let install_dir = &input.install_dir;
+    let install_dir_real = real_path!(input.install_dir.to_string());
+    let install_dir_str = install_dir_real.to_string_lossy().to_string();
     let version = &input.context.version;
     let version_str = version.to_string();
+
+    // Create a real host temp directory for downloads
+    let mktemp_output = exec_captured("mktemp", ["-d"])?;
+    let host_temp_dir = mktemp_output.stdout.trim().to_string();
 
     match env.os {
         HostOS::Linux => {
@@ -166,25 +171,19 @@ pub fn native_install(
 
             let zip_name = format!("awscli-exe-linux-{arch}-{version_str}.zip");
             let zip_url = format!("https://awscli.amazonaws.com/{zip_name}");
-            let temp_dir = &input.context.temp_dir;
-            let zip_path = temp_dir.join(&zip_name);
+            let zip_path = format!("{}/{}", host_temp_dir, zip_name);
 
             // Download the zip archive using curl on the host
             debug!("Downloading AWS CLI from <url>{}</url>", zip_url);
 
-            download_file(&zip_url, &zip_path.to_string_lossy())?;
+            download_file(&zip_url, &zip_path)?;
 
             // Unzip the archive
             debug!("Extracting AWS CLI archive");
 
             let unzip_output = exec_captured(
                 "unzip",
-                [
-                    "-o",
-                    &zip_path.to_string_lossy(),
-                    "-d",
-                    &temp_dir.to_string_lossy(),
-                ],
+                ["-o", &zip_path, "-d", &host_temp_dir],
             )?;
 
             if unzip_output.exit_code != 0 {
@@ -199,21 +198,20 @@ pub fn native_install(
             }
 
             // Run the installer with --install-dir pointing to proto's install directory
-            let installer_path = temp_dir.join("aws").join("install");
-            let bin_dir = install_dir.join("bin");
+            let installer_path = format!("{}/aws/install", host_temp_dir);
+            let bin_dir = format!("{}/bin", install_dir_str);
 
             debug!(
                 "Running AWS CLI installer to <path>{}</path>",
-                install_dir.display()
-            );
+                install_dir_str.clone());
 
             let install_output = exec(ExecCommandInput {
-                command: installer_path.to_string_lossy().to_string(),
+                command: installer_path,
                 args: vec![
                     "--install-dir".into(),
-                    install_dir.to_string_lossy().to_string(),
+                    install_dir_str.clone(),
                     "--bin-dir".into(),
-                    bin_dir.to_string_lossy().to_string(),
+                    bin_dir,
                     "--update".into(),
                 ],
                 set_executable: true,
@@ -235,26 +233,21 @@ pub fn native_install(
         HostOS::MacOS => {
             let pkg_name = format!("AWSCLIV2-{version_str}.pkg");
             let pkg_url = format!("https://awscli.amazonaws.com/{pkg_name}");
-            let temp_dir = &input.context.temp_dir;
-            let pkg_path = temp_dir.join(&pkg_name);
+            let pkg_path = format!("{}/{}", host_temp_dir, pkg_name);
 
             // Download the pkg using curl on the host
             debug!("Downloading AWS CLI from <url>{}</url>", pkg_url);
 
-            download_file(&pkg_url, &pkg_path.to_string_lossy())?;
+            download_file(&pkg_url, &pkg_path)?;
 
             // Use pkgutil to expand the pkg, then install to the proto directory
-            let expanded_dir = temp_dir.join("aws-cli-expanded");
+            let expanded_dir = format!("{}/aws-cli-expanded", host_temp_dir);
 
             debug!("Expanding AWS CLI package");
 
             let expand_output = exec_captured(
                 "pkgutil",
-                [
-                    "--expand-full",
-                    &pkg_path.to_string_lossy(),
-                    &expanded_dir.to_string_lossy(),
-                ],
+                ["--expand-full", &pkg_path, &expanded_dir],
             )?;
 
             if expand_output.exit_code != 0 {
@@ -270,23 +263,15 @@ pub fn native_install(
 
             // The expanded pkg contains aws-cli.pkg/Payload/aws-cli/
             // Copy the contents to the install directory
-            let payload_dir = expanded_dir
-                .join("aws-cli.pkg")
-                .join("Payload")
-                .join("aws-cli");
+            let payload_dir = format!("{}/aws-cli.pkg/Payload/aws-cli", expanded_dir);
 
             debug!(
                 "Copying AWS CLI to <path>{}</path>",
-                install_dir.display()
-            );
+                install_dir_str.clone());
 
             let copy_output = exec_captured(
                 "cp",
-                [
-                    "-R",
-                    &format!("{}/.", payload_dir.to_string_lossy()),
-                    &install_dir.to_string_lossy(),
-                ],
+                ["-R", &format!("{}/.", payload_dir), &install_dir_str.clone()],
             )?;
 
             if copy_output.exit_code != 0 {
@@ -303,27 +288,25 @@ pub fn native_install(
         HostOS::Windows => {
             let msi_name = format!("AWSCLIV2-{version_str}.msi");
             let msi_url = format!("https://awscli.amazonaws.com/{msi_name}");
-            let temp_dir = &input.context.temp_dir;
-            let msi_path = temp_dir.join(&msi_name);
+            let msi_path = format!("{}/{}", host_temp_dir, msi_name);
 
             // Download the MSI using curl on the host
             debug!("Downloading AWS CLI from <url>{}</url>", msi_url);
 
-            download_file(&msi_url, &msi_path.to_string_lossy())?;
+            download_file(&msi_url, &msi_path)?;
 
             // Install using msiexec with target directory
             debug!(
                 "Installing AWS CLI to <path>{}</path>",
-                install_dir.display()
-            );
+                install_dir_str.clone());
 
             let install_output = exec(ExecCommandInput {
                 command: "msiexec".into(),
                 args: vec![
                     "/i".into(),
-                    msi_path.to_string_lossy().to_string(),
+                    msi_path,
                     "/qn".into(),
-                    format!("INSTALLDIR={}", install_dir.to_string_lossy()),
+                    format!("INSTALLDIR={}", install_dir_str.clone()),
                 ],
                 stream: true,
                 ..ExecCommandInput::default()
@@ -370,8 +353,7 @@ pub fn native_uninstall(
             // On Linux/macOS, proto handles directory removal
             debug!(
                 "Removing AWS CLI from <path>{}</path>",
-                input.uninstall_dir.display()
-            );
+                input.uninstall_dir.to_string());
         }
     }
 
@@ -388,15 +370,13 @@ pub fn locate_executables(
     let env = get_host_environment()?;
 
     let exe_path = match env.os {
-        HostOS::Windows => "bin/aws.exe".to_string(),
-        HostOS::MacOS => "aws-cli/aws".to_string(),
-        _ => "bin/aws".to_string(),
+        HostOS::Windows => "aws.exe".to_string(),
+        _ => "aws".to_string(),
     };
 
     let completer_path = match env.os {
-        HostOS::Windows => "bin/aws_completer.exe".to_string(),
-        HostOS::MacOS => "aws-cli/aws_completer".to_string(),
-        _ => "bin/aws_completer".to_string(),
+        HostOS::Windows => "aws_completer.exe".to_string(),
+        _ => "aws_completer".to_string(),
     };
 
     Ok(Json(LocateExecutablesOutput {
