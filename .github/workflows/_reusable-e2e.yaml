@@ -56,4 +56,4 @@ jobs:
         run: proto install awscli
 
       - name: Verify installation (${{ matrix.os }})
-        run: proto run awscli -- version
+        run:  proto run awscli -- --version
