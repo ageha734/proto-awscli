@@ -28,22 +28,32 @@ jobs:
           name: proto_awscli.wasm
           path: .
 
-      - name: Setup proto
-        uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
+      - uses: moonrepo/setup-toolchain@261c62cb5b0f580c7be7c8cd0f023a2e96756095 # v0.6.4
         with:
           auto-install: true
 
       - name: Configure plugin
-        run: |
-          cat > ~/.proto/.prototools <<'PROTOEOF'
-          awscli-test = "2.34.59"
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { writeFileSync } = require('node:fs');
+            const { join } = require('node:path');
 
-          [plugins]
-          awscli-test = "file://$(pwd)/proto_awscli.wasm"
-          PROTOEOF
+            const pluginPath = join(process.env.GITHUB_WORKSPACE, 'proto_awscli.wasm');
+            const normalizedPath = pluginPath.replace(/\\/g, '/');
+            const pluginUri = `file://${normalizedPath}`;
+
+            const prototoolsPath = join(process.env.GITHUB_WORKSPACE, '.prototools');
+            const content = [
+              'awscli = "2.34.59"',
+              '[plugins.tools]',
+              `awscli = "${pluginUri}"`,
+            ].join('\n');
+
+            writeFileSync(prototoolsPath, content);
 
       - name: Run E2E (${{ matrix.os }})
-        run: proto install awscli-test
+        run: proto install awscli
 
       - name: Verify installation (${{ matrix.os }})
-        run: proto run awscli-test -- version
+        run: proto run awscli -- version
