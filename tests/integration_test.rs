@@ -279,7 +279,7 @@ mod awscli_tool {
             .await;
 
         let aws_exe = output.exes.get("aws").unwrap();
-        assert_eq!(aws_exe.exe_path, Some("aws-cli/aws".into()));
+        assert_eq!(aws_exe.exe_path, Some("aws".into()));
         assert!(aws_exe.primary);
     }
 
