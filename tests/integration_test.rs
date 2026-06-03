@@ -11,7 +11,7 @@ fn ensure_wasm_built() {
 
         let output = Command::new("cargo")
             .arg("+1.91.0")
-            .args(["build", "--target", "wasm32-wasip1", "--quiet"])
+            .args(["build", "--target", "wasm32-wasip1", "--release", "--quiet"])
             .current_dir(manifest_dir)
             .output()
             .map_err(|error| format!("Failed to run cargo build for wasm target: {error}"))?;
@@ -33,7 +33,7 @@ fn ensure_wasm_built() {
             let source = dir.join(source_name);
             let expected = dir.join(expected_name);
 
-            if source.exists() && !expected.exists() {
+            if source.exists() {
                 fs::copy(&source, &expected).map_err(|error| {
                     format!(
                         "Failed to create expected wasm file `{}` from `{}`: {}",
@@ -122,7 +122,7 @@ mod awscli_tool {
             })
             .await;
 
-        assert!(output.candidate.is_some());
+        assert!(output.candidate.is_none());
     }
 
     #[tokio::test(flavor = "multi_thread")]

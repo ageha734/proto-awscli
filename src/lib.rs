@@ -46,9 +46,9 @@ pub fn resolve_version(
     let mut output = ResolveVersionOutput::default();
 
     // Map "v2" alias to latest v2 range
-    if let UnresolvedVersionSpec::Alias(alias) = &input.initial
-        && (alias == "v2" || alias == "2")
-    {
+    let initial = input.initial.to_string();
+
+    if initial == "v2" || initial == "2" {
         output.candidate = Some(UnresolvedVersionSpec::parse(">=2.0.0")?);
     }
 
@@ -366,14 +366,11 @@ pub fn locate_executables(
 ) -> FnResult<Json<LocateExecutablesOutput>> {
     let env = get_host_environment()?;
 
-    let exe_path = match env.os {
-        HostOS::Windows => "aws.exe".to_string(),
-        _ => "aws".to_string(),
-    };
-
-    let completer_path = match env.os {
-        HostOS::Windows => "aws_completer.exe".to_string(),
-        _ => "aws_completer".to_string(),
+    let (exe_path, completer_path) = match env.os {
+        HostOS::Linux => ("bin/aws".to_string(), "bin/aws_completer".to_string()),
+        HostOS::MacOS => ("aws-cli/aws".to_string(), "aws-cli/aws_completer".to_string()),
+        HostOS::Windows => ("bin/aws.exe".to_string(), "bin/aws_completer.exe".to_string()),
+        _ => ("aws".to_string(), "aws_completer".to_string()),
     };
 
     Ok(Json(LocateExecutablesOutput {
