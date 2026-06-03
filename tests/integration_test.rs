@@ -10,7 +10,7 @@ mod awscli_tool {
 
         let output = plugin
             .register_tool(RegisterToolInput {
-                id: "awscli-test".into(),
+                id: Id::new("awscli-test").unwrap(),
             })
             .await;
 

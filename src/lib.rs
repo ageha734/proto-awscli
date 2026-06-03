@@ -46,10 +46,10 @@ pub fn resolve_version(
     let mut output = ResolveVersionOutput::default();
 
     // Map "v2" alias to latest v2 range
-    if let UnresolvedVersionSpec::Alias(alias) = &input.initial {
-        if alias == "v2" || alias == "2" {
-            output.candidate = Some(UnresolvedVersionSpec::parse(">=2.0.0")?);
-        }
+    if let UnresolvedVersionSpec::Alias(alias) = &input.initial
+        && (alias == "v2" || alias == "2")
+    {
+        output.candidate = Some(UnresolvedVersionSpec::parse(">=2.0.0")?);
     }
 
     Ok(Json(output))
