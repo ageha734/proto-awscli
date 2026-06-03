@@ -39,8 +39,8 @@ jobs:
           tag_name: ${{ inputs.tag }}
           draft: true
           files: |
-            awscli_plugin.wasm
-            awscli_plugin.wasm.sha256
+            proto_awscli.wasm
+            proto_awscli.wasm.sha256
           prerelease: ${{ contains(inputs.tag, '-alpha.') }}
           generate_release_notes: true
 
