@@ -1,23 +1,51 @@
 use proto_pdk_test_utils::*;
 use std::process::Command;
 use std::sync::OnceLock;
+use std::{fs, path::Path};
 
 fn ensure_wasm_built() {
     static BUILD_RESULT: OnceLock<Result<(), String>> = OnceLock::new();
 
     let result = BUILD_RESULT.get_or_init(|| {
-        let status = Command::new("cargo")
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+        let output = Command::new("cargo")
+            .arg("+1.91.0")
             .args(["build", "--target", "wasm32-wasip1", "--quiet"])
-            .status()
+            .current_dir(manifest_dir)
+            .output()
             .map_err(|error| format!("Failed to run cargo build for wasm target: {error}"))?;
 
-        if status.success() {
-            Ok(())
-        } else {
-            Err(format!(
-                "Failed to build wasm plugin before tests (status: {status})"
-            ))
+        if !output.status.success() {
+            return Err(format!(
+                "Failed to build wasm plugin before tests (status: {}). stderr: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            ));
         }
+
+        let wasm_debug_dir = manifest_dir.join("target/wasm32-wasip1/debug");
+        let wasm_release_dir = manifest_dir.join("target/wasm32-wasip1/release");
+        let source_name = "proto_awscli.wasm";
+        let expected_name = "proto-awscli.wasm";
+
+        for dir in [&wasm_debug_dir, &wasm_release_dir] {
+            let source = dir.join(source_name);
+            let expected = dir.join(expected_name);
+
+            if source.exists() && !expected.exists() {
+                fs::copy(&source, &expected).map_err(|error| {
+                    format!(
+                        "Failed to create expected wasm file `{}` from `{}`: {}",
+                        expected.display(),
+                        source.display(),
+                        error
+                    )
+                })?;
+            }
+        }
+
+        Ok(())
     });
 
     if let Err(error) = result {
