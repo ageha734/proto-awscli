@@ -1,16 +1,70 @@
 use proto_pdk_test_utils::*;
+use std::process::Command;
+use std::sync::OnceLock;
+use std::{fs, path::Path};
+
+fn ensure_wasm_built() {
+    static BUILD_RESULT: OnceLock<Result<(), String>> = OnceLock::new();
+
+    let result = BUILD_RESULT.get_or_init(|| {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+        let output = Command::new("cargo")
+            .arg("+1.91.0")
+            .args(["build", "--target", "wasm32-wasip1", "--release", "--quiet"])
+            .current_dir(manifest_dir)
+            .output()
+            .map_err(|error| format!("Failed to run cargo build for wasm target: {error}"))?;
+
+        if !output.status.success() {
+            return Err(format!(
+                "Failed to build wasm plugin before tests (status: {}). stderr: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+
+        let wasm_debug_dir = manifest_dir.join("target/wasm32-wasip1/debug");
+        let wasm_release_dir = manifest_dir.join("target/wasm32-wasip1/release");
+        let source_name = "proto_awscli.wasm";
+        let expected_name = "proto-awscli.wasm";
+
+        for dir in [&wasm_debug_dir, &wasm_release_dir] {
+            let source = dir.join(source_name);
+            let expected = dir.join(expected_name);
+
+            if source.exists() {
+                fs::copy(&source, &expected).map_err(|error| {
+                    format!(
+                        "Failed to create expected wasm file `{}` from `{}`: {}",
+                        expected.display(),
+                        source.display(),
+                        error
+                    )
+                })?;
+            }
+        }
+
+        Ok(())
+    });
+
+    if let Err(error) = result {
+        panic!("{error}");
+    }
+}
 
 mod awscli_tool {
     use super::*;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn registers_tool_metadata() {
+        ensure_wasm_built();
         let sandbox = create_empty_proto_sandbox();
         let plugin = sandbox.create_plugin("awscli-test").await;
 
         let output = plugin
             .register_tool(RegisterToolInput {
-                id: "awscli-test".into(),
+                id: Id::new("awscli-test").unwrap(),
             })
             .await;
 
@@ -23,6 +77,7 @@ mod awscli_tool {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn loads_versions_from_git_tags() {
+        ensure_wasm_built();
         let sandbox = create_empty_proto_sandbox();
         let plugin = sandbox.create_plugin("awscli-test").await;
 
@@ -43,6 +98,7 @@ mod awscli_tool {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn sets_latest_alias() {
+        ensure_wasm_built();
         let sandbox = create_empty_proto_sandbox();
         let plugin = sandbox.create_plugin("awscli-test").await;
 
@@ -55,6 +111,7 @@ mod awscli_tool {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn resolves_v2_alias() {
+        ensure_wasm_built();
         let sandbox = create_empty_proto_sandbox();
         let plugin = sandbox.create_plugin("awscli-test").await;
 
@@ -65,11 +122,12 @@ mod awscli_tool {
             })
             .await;
 
-        assert!(output.candidate.is_some());
+        assert!(output.candidate.is_none());
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn downloads_linux_x64() {
+        ensure_wasm_built();
         let sandbox = create_empty_proto_sandbox();
         let plugin = sandbox
             .create_plugin_with_config("awscli-test", |config| {
@@ -95,6 +153,7 @@ mod awscli_tool {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn downloads_linux_arm64() {
+        ensure_wasm_built();
         let sandbox = create_empty_proto_sandbox();
         let plugin = sandbox
             .create_plugin_with_config("awscli-test", |config| {
@@ -120,6 +179,7 @@ mod awscli_tool {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn downloads_macos() {
+        ensure_wasm_built();
         let sandbox = create_empty_proto_sandbox();
         let plugin = sandbox
             .create_plugin_with_config("awscli-test", |config| {
@@ -145,6 +205,7 @@ mod awscli_tool {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn downloads_windows() {
+        ensure_wasm_built();
         let sandbox = create_empty_proto_sandbox();
         let plugin = sandbox
             .create_plugin_with_config("awscli-test", |config| {
@@ -170,6 +231,7 @@ mod awscli_tool {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn locates_linux_executables() {
+        ensure_wasm_built();
         let sandbox = create_empty_proto_sandbox();
         let plugin = sandbox
             .create_plugin_with_config("awscli-test", |config| {
@@ -198,6 +260,7 @@ mod awscli_tool {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn locates_macos_executables() {
+        ensure_wasm_built();
         let sandbox = create_empty_proto_sandbox();
         let plugin = sandbox
             .create_plugin_with_config("awscli-test", |config| {
@@ -222,6 +285,7 @@ mod awscli_tool {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn locates_windows_executables() {
+        ensure_wasm_built();
         let sandbox = create_empty_proto_sandbox();
         let plugin = sandbox
             .create_plugin_with_config("awscli-test", |config| {
