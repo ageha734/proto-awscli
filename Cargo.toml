@@ -8,6 +8,10 @@ license = "MIT"
 repository = "https://github.com/ageha734/proto-awscli"
 publish = false
 
+[features]
+default = []
+wasm = []
+
 [lib]
 crate-type = ["cdylib"]
 
