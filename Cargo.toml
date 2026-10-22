@@ -1,6 +1,6 @@
 [package]
 name = "proto-awscli"
-version = "0.1.0"
+version = "1.2.0-alpha.20261022.8"
 edition = "2024"
 description = "Proto WASM plugin for AWS CLI v2."
 authors = ["ageha734"]
